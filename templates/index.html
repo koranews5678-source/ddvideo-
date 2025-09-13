@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تحميل من يوتيوب</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error-message {
+            color: #e74c3c;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>تحميل من يوتيوب</h1>
+            <p>أدخل رابط الفيديو أدناه</p>
+        </header>
+        <div id="form-section">
+            <input type="text" id="video-url" placeholder="أدخل رابط الفيديو هنا">
+            <button id="get-qualities-btn">عرض الجودات</button>
+            <button id="clear-btn" class="clear-btn">مسح</button>
+        </div>
+        <div id="loading-spinner" class="hidden loading-spinner"></div>
+        <div id="quality-options" class="hidden">
+            <h2 id="video-title"></h2>
+            <div id="all-qualities" class="quality-grid"></div>
+        </div>
+        <p id="error-message" class="error-message"></p>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        const formatColors = {
+            'mp4': '#e74c3c',
+            'webm': '#3498db',
+            'm4a': '#9b59b6',
+            'mp3': '#f1c40f',
+            'ogg': '#e67e22',
+            'flv': '#2ecc71',
+            '3gp': '#34495e',
+            'default': '#7f8c8d'
+        };
+
+        $(document).ready(function() {
+            $('#get-qualities-btn').on('click', function() {
+                const url = $('#video-url').val();
+                if (!url) {
+                    $('#error-message').text('الرجاء إدخال رابط فيديو.');
+                    return;
+                }
+                
+                $('#error-message').text('');
+                $('#quality-options').addClass('hidden');
+                $('#loading-spinner').removeClass('hidden');
+
+                $.ajax({
+                    url: '/get_qualities',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ url: url }),
+                    success: function(response) {
+                        $('#loading-spinner').addClass('hidden');
+                        if (response.success) {
+                            $('#video-title').text(response.title);
+                            $('#all-qualities').empty();
+                            
+                            for (const ext in response.formats_by_ext) {
+                                const section = $('<div>').addClass('quality-section');
+                                const color = formatColors[ext] || formatColors['default'];
+                                section.append($('<h3>').addClass('quality-header').text(ext.toUpperCase()).css('background-color', color));
+
+                                const qualityList = $('<div>').addClass('quality-list');
+                                response.formats_by_ext[ext].forEach(format => {
+                                    const downloadBtn = $('<a>').attr('href', '#')
+                                                               .addClass('quality-btn')
+                                                               .attr('data-format-id', format.format_id)
+                                                               .text(format.quality);
+                                    qualityList.append(downloadBtn);
+                                });
+                                section.append(qualityList);
+                                $('#all-qualities').append(section);
+                            }
+                            
+                            $('#quality-options').removeClass('hidden');
+                        } else {
+                            $('#error-message').text(response.error);
+                        }
+                    },
+                    error: function() {
+                        $('#loading-spinner').addClass('hidden');
+                        $('#error-message').text('حدث خطأ غير متوقع. الرجاء المحاولة مرة أخرى.');
+                    }
+                });
+            });
+
+            $(document).on('click', '.quality-btn', function(e) {
+                e.preventDefault();
+                const url = $('#video-url').val();
+                const formatId = $(this).data('format-id');
+                const title = $('#video-title').text() || 'video_download';
+
+                $.ajax({
+                    url: '/download',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ 
+                        url: url,
+                        format_id: formatId,
+                        title: title
+                    }),
+                    xhrFields: {
+                        responseType: 'blob'
+                    },
+                    success: function(blob) {
+                        const link = document.createElement('a');
+                        link.href = window.URL.createObjectURL(blob);
+                        link.download = title;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    },
+                    error: function() {
+                        $('#error-message').text('فشل التحميل. قد يكون الرابط غير صالح أو توجد مشكلة في الخادم.');
+                    }
+                });
+            });
+
+            $('#clear-btn').on('click', function() {
+                $('#video-url').val('');
+                $('#quality-options').addClass('hidden');
+                $('#error-message').text('');
+                $('#loading-spinner').addClass('hidden');
+            });
+        });
+    </script>
+</body>
+</html>
